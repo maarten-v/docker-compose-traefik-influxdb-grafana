@@ -1,0 +1,67 @@
+version: "3.3"
+
+services:
+  grafana:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.entryPoints=port443"
+      - "traefik.http.routers.grafana.rule=Host(`<domainname>`)"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.routers.grafana.tls.certResolver=le-ssl"
+      - "traefik.http.routers.grafana.service=grafana"
+      - "traefik.http.services.grafana.loadBalancer.server.port=3000"
+    image: grafana/grafana
+    volumes:
+     - grafana-storage:/var/lib/grafana
+
+  influxdb:
+    image: influxdb
+    volumes:
+      - /home/maarten/dockerconfig/influxdb.conf:/etc/influxdb/influxdb.conf:ro
+      - /home/maarten/dockerdata/influxdb:/var/lib/influxdb
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.influxdb.entryPoints=port8086"
+      - "traefik.http.routers.influxdb.rule=Host(`<domainname>`)"
+      - "traefik.http.routers.influxdb.service=influxdb"
+      - "traefik.http.services.influxdb.loadBalancer.server.port=8086"
+    environment:
+      - INFLUXDB_ADMIN_USER=admin
+      - INFLUXDB_ADMIN_PASSWORD=<hashedpassword>
+
+
+  traefik:
+    image: traefik:v2.1
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8086:8086"
+    command:
+      - "--log.level=DEBUG"
+      - "--api=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--entryPoints.port443.address=:443"
+      - "--entryPoints.port80.address=:80"
+      - "--entryPoints.port8086.address=:8086"
+      - "--certificatesResolvers.le-ssl.acme.tlsChallenge=true"
+      - "--certificatesResolvers.le-ssl.acme.email=<email address>"
+      - "--certificatesResolvers.le-ssl.acme.storage=/letsencrypt/acme.json"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`<domainname>`)"
+      - "traefik.http.routers.dashboard.entryPoints=port443"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certResolver=le-ssl"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=api-auth"
+      # get md5 from htpasswd or http://www.htaccesstools.com/htpasswd-generator/
+      # and then double all $ to $$ to avoid docker-compose
+      - "traefik.http.middlewares.api-auth.basicauth.users=<username>:<hashedpasword>"
+    volumes:
+      - traefik-storage:/letsencrypt/
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  traefik-storage:
+  grafana-storage:
